@@ -9,34 +9,36 @@ class TimeTrackerApp:
         self.root.title("Time Tracker")
         self.root.geometry("950x600")
         
-        # Modern Color Palette
-        self.bg_color = "#F5F7FA"     # Soft app background
-        self.panel_color = "#FFFFFF"  # Pure white panels
-        self.text_color = "#2D3748"   # Slate dark gray for text
-        self.accent_color = "#4A5568" # Muted slate for buttons
+        # --- THEME CONFIGURATION (Strict Palette) ---
+        self.bg_color = "#E8DCC4"      # Deep parchment for the main background
+        self.panel_color = "#F5EFE1"   # Lighter paper for cards and active areas
+        self.text_color = "#2C1E1A"    # Dark brown-black mimicking old ink
+        self.accent_color = "#8B261D"  # Dried blood/wax seal red for primary actions
+        self.notebook_color = "#F0EDE2" # Slightly greyed paper for inactive tabs
         
         self.root.configure(bg=self.bg_color)
         
-        # Variables
-        self.running = False
-        self.seconds_passed = 0
-        self.current_category = None
-        self.start_datetime = None
+        # --- STATE VARIABLES ---
+        self.running = False           
+        self.seconds_passed = 0        
+        self.current_category = None   
+        self.start_datetime = None     
         
-        # Database Setup
+        # --- DATABASE INITIALIZATION ---
         self.conn = sqlite3.connect("tracker_v2.db")
         self.cursor = self.conn.cursor()
         self.setup_db()
 
-        # UI Layout
-        self.setup_styles()
-        self.create_left_panel()
-        self.create_right_panel()
+        # --- UI CONSTRUCTION ---
+        self.setup_styles()            
+        self.create_left_panel()       
+        self.create_right_panel()      
+        self.create_context_menu()     
         
-        # Load initial tabs
         self.refresh_tabs()
 
     def setup_db(self):
+        """Creates the necessary database tables for categories and time logs."""
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS categories 
                             (id INTEGER PRIMARY KEY, name TEXT UNIQUE)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS logs 
@@ -45,59 +47,100 @@ class TimeTrackerApp:
         self.conn.commit()
 
     def setup_styles(self):
+        """Applies the 'Old Paper' theme to standard ttk widgets using the clam engine."""
         style = ttk.Style()
         style.theme_use('clam') 
         
-        # Base App Styling
+        # Base Frame Styling
         style.configure("TFrame", background=self.bg_color)
         
-        # Notebook (Tabs) Styling
-        style.configure("TNotebook", background=self.bg_color, borderwidth=0)
-        style.configure("TNotebook.Tab", background="#E2E8F0", foreground=self.text_color, 
-                        padding=[20, 10], font=("Segoe UI", 10), borderwidth=0)
-        style.map("TNotebook.Tab", background=[("selected", self.panel_color)])
+        # Notebook Container
+        style.configure("TNotebook", 
+                        background=self.bg_color, 
+                        borderwidth=0, 
+                        tabmargins=[2, 5, 2, 0])
+
+        # Tab Styling (Fixed size, no shift)
+        style.configure("TNotebook.Tab", 
+                        background=self.notebook_color, 
+                        foreground=self.text_color, 
+                        padding=[30, 8], 
+                        font=("Segoe UI", 10), 
+                        borderwidth=0, 
+                        focuscolor="",
+                        shiftrelief=0)
         
-        # Table (Treeview) Styling
-        style.configure("Treeview", font=("Segoe UI", 10), rowheight=35, 
-                        background=self.panel_color, fieldbackground=self.panel_color, borderwidth=0)
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"), 
-                        background=self.panel_color, foreground="#A0AEC0", borderwidth=0)
-        style.map("Treeview", background=[("selected", "#EDF2F7")], foreground=[("selected", self.text_color)])
+        # Tab Selection (Only color changes, no expand map)
+        style.map("TNotebook.Tab", 
+                  background=[("selected", self.panel_color)])
         
-        # Typography
-        style.configure("Timer.TLabel", font=("Segoe UI", 46, "bold"), 
-                        background=self.panel_color, foreground=self.text_color)
+        # Table (Treeview) Body
+        style.configure("Treeview", 
+                        font=("Segoe UI", 10), 
+                        rowheight=35, 
+                        background=self.panel_color, 
+                        fieldbackground=self.panel_color, 
+                        foreground=self.text_color,
+                        borderwidth=0)
+        
+        # Table Headers (Removed outlines and 3D effects)
+        style.configure("Treeview.Heading", 
+                        font=("Segoe UI", 10, "bold"), 
+                        background=self.notebook_color, 
+                        foreground=self.text_color, 
+                        borderwidth=0, 
+                        relief="flat")
+        
+        # Table Selection Highlight
+        style.map("Treeview", 
+                  background=[("selected", self.accent_color)], 
+                  foreground=[("selected", self.panel_color)])
+        
+        # Timer Display
+        style.configure("Timer.TLabel", 
+                        font=("Segoe UI", 46, "bold"), 
+                        background=self.panel_color, 
+                        foreground=self.text_color)
+
+    def create_context_menu(self):
+        """Builds the popup menu used for editing and deleting rows."""
+        self.context_menu = tk.Menu(self.root, tearoff=0, bg=self.panel_color, fg=self.text_color)
+        self.context_menu.add_command(label="Edit Task Name", command=self.edit_selected_row)
+        self.context_menu.add_command(label="Delete Entry", command=self.delete_selected_row)
+
+    def show_context_menu(self, event):
+        """Triggers the context menu and ensures the right-clicked row is selected."""
+        item = event.widget.identify_row(event.y)
+        if item:
+            event.widget.selection_set(item) 
+            self.context_menu.post(event.x_root, event.y_root)
 
     def create_left_panel(self):
-        # White card for the timer
+        """Creates the static side panel containing the timer and primary buttons."""
         left_frame = tk.Frame(self.root, width=300, bg=self.panel_color)
         left_frame.pack(side="left", fill="y", padx=20, pady=20)
-        left_frame.pack_propagate(False)
+        left_frame.pack_propagate(False) 
 
-        # Timer Display
         self.timer_label = ttk.Label(left_frame, text="00:00:00", style="Timer.TLabel")
         self.timer_label.pack(pady=(40, 50))
 
-        # Start/Stop Button
-        self.btn_toggle = tk.Button(left_frame, text="START", bg=self.accent_color, fg="#FFFFFF", 
+        self.btn_toggle = tk.Button(left_frame, text="START", bg=self.accent_color, fg=self.panel_color, 
                                     font=("Segoe UI", 12, "bold"), relief="flat", cursor="hand2", command=self.toggle_timer)
         self.btn_toggle.pack(fill="x", padx=20, pady=10, ipady=12)
 
-        # Reset Button
-        self.btn_reset = tk.Button(left_frame, text="Reset Timer", bg=self.panel_color, fg="#718096", 
+        self.btn_reset = tk.Button(left_frame, text="Reset Timer", bg=self.panel_color, fg=self.text_color, 
                                    font=("Segoe UI", 10), relief="flat", cursor="hand2", command=self.reset_timer)
         self.btn_reset.pack(fill="x", padx=20, pady=5)
 
-        # Add Entry Button
-        self.btn_add = tk.Button(left_frame, text="ADD ENTRY", bg="#E2E8F0", fg="#A0AEC0",
+        self.btn_add = tk.Button(left_frame, text="ADD ENTRY", bg=self.notebook_color, fg=self.text_color,
                                  font=("Segoe UI", 11, "bold"), relief="flat", state="disabled", command=self.save_log)
         self.btn_add.pack(fill="x", side="bottom", padx=20, pady=30, ipady=12)
 
     def create_right_panel(self):
+        """Creates the dynamic area for category management and log tables."""
         right_frame = tk.Frame(self.root, bg=self.bg_color)
         right_frame.pack(side="right", expand=True, fill="both", padx=(0, 20), pady=20)
 
-        # Top Bar
         top_bar = tk.Frame(right_frame, bg=self.bg_color)
         top_bar.pack(fill="x", pady=(0, 15))
 
@@ -105,44 +148,44 @@ class TimeTrackerApp:
                                 font=("Segoe UI", 10), relief="flat", cursor="hand2", command=self.add_category)
         btn_new_cat.pack(side="right", ipady=6, ipadx=15)
 
-        # Notebook for Tabs
         self.notebook = ttk.Notebook(right_frame)
         self.notebook.pack(expand=True, fill="both")
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
 
     def toggle_timer(self):
+        """Starts or stops the timer loop."""
         if not self.running:
             self.running = True
             if not self.start_datetime or self.seconds_passed == 0:
                 self.start_datetime = datetime.now()
-            self.btn_toggle.config(text="STOP", bg="#E2E8F0", fg=self.text_color)
+            self.btn_toggle.config(text="STOP", bg=self.notebook_color, fg=self.text_color)
             self.update_clock()
         else:
             self.running = False
-            self.btn_toggle.config(text="RESUME", bg=self.accent_color, fg="#FFFFFF")
+            self.btn_toggle.config(text="RESUME", bg=self.accent_color, fg=self.panel_color)
             if self.seconds_passed > 0:
-                self.btn_add.config(state="normal", bg=self.text_color, fg="#FFFFFF", cursor="hand2")
+                self.btn_add.config(state="normal", bg=self.text_color, fg=self.panel_color, cursor="hand2")
 
     def update_clock(self):
+        """The recursive loop that increments seconds and updates the display label."""
         if self.running:
             self.seconds_passed += 1
-            self.display_time()
+            h, m = divmod(self.seconds_passed, 3600)
+            m, s = divmod(m, 60)
+            self.timer_label.config(text=f"{h:02d}:{m:02d}:{s:02d}")
             self.root.after(1000, self.update_clock)
             
-    def display_time(self):
-        h, m = divmod(self.seconds_passed, 3600)
-        m, s = divmod(m, 60)
-        self.timer_label.config(text=f"{h:02d}:{m:02d}:{s:02d}")
-
     def reset_timer(self):
+        """Clears current progress and resets UI to initial state."""
         self.running = False
         self.seconds_passed = 0
         self.start_datetime = None
-        self.display_time()
-        self.btn_toggle.config(text="START", bg=self.accent_color, fg="#FFFFFF")
-        self.btn_add.config(state="disabled", bg="#E2E8F0", fg="#A0AEC0", cursor="arrow")
+        self.timer_label.config(text="00:00:00")
+        self.btn_toggle.config(text="START", bg=self.accent_color, fg=self.panel_color)
+        self.btn_add.config(state="disabled", bg=self.notebook_color, fg=self.text_color, cursor="arrow")
 
     def add_category(self):
+        """Prompts user for a name and adds a new category to the database and tab list."""
         name = simpledialog.askstring("New Category", "Enter category name:")
         if name and name.strip():
             try:
@@ -153,6 +196,7 @@ class TimeTrackerApp:
                 messagebox.showerror("Error", "Category already exists.")
 
     def refresh_tabs(self):
+        """Clears and rebuilds the tab interface based on current database records."""
         for tab in self.notebook.tabs():
             self.notebook.forget(tab)
         
@@ -163,24 +207,20 @@ class TimeTrackerApp:
             frame = ttk.Frame(self.notebook)
             self.notebook.add(frame, text=f" {name} ")
             
-            # Treeview Table
             cols = ("ID", "Name", "Date", "Time", "Duration")
             tree = ttk.Treeview(frame, columns=cols, show="headings")
-            
-            tree.heading("ID", text="ID")
-            tree.heading("Name", text="NAME")
-            tree.heading("Date", text="DATE")
-            tree.heading("Time", text="TIME")
-            tree.heading("Duration", text="DURATION")
+            for col in cols:
+                tree.heading(col, text=col)
+                tree.column(col, anchor="center")
             
             tree.column("ID", width=0, stretch=tk.NO) 
             tree.column("Name", width=250, anchor="w")
-            tree.column("Date", width=120, anchor="center")
-            tree.column("Time", width=120, anchor="center")
-            tree.column("Duration", width=120, anchor="center")
             
             tree.pack(expand=True, fill="both")
-            tree.bind("<Double-1>", self.on_row_double_click)
+            
+            tree.bind("<Double-1>", self.on_row_double_click) 
+            tree.bind("<Button-3>", self.show_context_menu)   
+            tree.bind("<Button-2>", self.show_context_menu)   
             
             self.cursor.execute("SELECT id, log_name, log_date, log_time, duration FROM logs WHERE category_name=? ORDER BY id DESC", (name,))
             for log in self.cursor.fetchall():
@@ -191,276 +231,55 @@ class TimeTrackerApp:
                 tree.insert("", "end", values=(log_id, log_name, log_date, log_time, duration_str))
 
     def on_tab_change(self, event):
+        """Updates the current_category variable whenever a user clicks a different tab."""
         selected_id = self.notebook.select()
         if selected_id:
             self.current_category = self.notebook.tab(selected_id, "text").strip()
 
     def save_log(self):
+        """Writes the current session time to the database and refreshes the UI."""
         if not self.current_category:
-            messagebox.showwarning("Warning", "Please create and select a category tab first.")
+            messagebox.showwarning("Warning", "Select a category tab first.")
             return
-        
         log_date = self.start_datetime.strftime("%m/%d/%Y")
         log_time = self.start_datetime.strftime("%I:%M %p")
-        log_name = "Untitled Task"
-        
         self.cursor.execute("INSERT INTO logs (category_name, log_name, log_date, log_time, duration) VALUES (?, ?, ?, ?, ?)",
-                            (self.current_category, log_name, log_date, log_time, self.seconds_passed))
+                            (self.current_category, "New Task", log_date, log_time, self.seconds_passed))
         self.conn.commit()
         self.reset_timer()
         self.refresh_tabs()
 
-    def on_row_double_click(self, event):
-        tree = event.widget
+    def edit_selected_row(self):
+        """Opens a dialog to rename the task name in the selected row and database."""
+        selected_tab = self.notebook.nametowidget(self.notebook.select())
+        tree = selected_tab.winfo_children()[0] 
         selected = tree.selection()
-        if not selected:
-            return
-            
-        item = tree.item(selected[0])
-        values = item['values']
-        log_id = values[0]
-        current_name = values[1]
+        if not selected: return
         
-        new_name = simpledialog.askstring("Rename Entry", "Update task name:", initialvalue=current_name)
+        log_id, current_name = tree.item(selected[0])['values'][0:2]
+        new_name = simpledialog.askstring("Edit", "Update task name:", initialvalue=current_name)
         
-        if new_name and new_name.strip():
+        if new_name:
             self.cursor.execute("UPDATE logs SET log_name = ? WHERE id = ?", (new_name.strip(), log_id))
             self.conn.commit()
             self.refresh_tabs()
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = TimeTrackerApp(root)
-    root.mainloop()
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
-import sqlite3
-from datetime import datetime
-
-class TimeTrackerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Time Tracker")
-        self.root.geometry("950x600")
-        
-        # Modern Color Palette
-        self.bg_color = "#F5F7FA"     # Soft app background
-        self.panel_color = "#FFFFFF"  # Pure white panels
-        self.text_color = "#2D3748"   # Slate dark gray for text
-        self.accent_color = "#4A5568" # Muted slate for buttons
-        
-        self.root.configure(bg=self.bg_color)
-        
-        # Variables
-        self.running = False
-        self.seconds_passed = 0
-        self.current_category = None
-        self.start_datetime = None
-        
-        # Database Setup
-        self.conn = sqlite3.connect("tracker_v2.db")
-        self.cursor = self.conn.cursor()
-        self.setup_db()
-
-        # UI Layout
-        self.setup_styles()
-        self.create_left_panel()
-        self.create_right_panel()
-        
-        # Load initial tabs
-        self.refresh_tabs()
-
-    def setup_db(self):
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS categories 
-                            (id INTEGER PRIMARY KEY, name TEXT UNIQUE)''')
-        self.cursor.execute('''CREATE TABLE IF NOT EXISTS logs 
-                            (id INTEGER PRIMARY KEY, category_name TEXT, 
-                            log_name TEXT, log_date TEXT, log_time TEXT, duration INTEGER)''')
-        self.conn.commit()
-
-    def setup_styles(self):
-        style = ttk.Style()
-        style.theme_use('clam') 
-        
-        # Base App Styling
-        style.configure("TFrame", background=self.bg_color)
-        
-        # Notebook (Tabs) Styling
-        style.configure("TNotebook", background=self.bg_color, borderwidth=0)
-        style.configure("TNotebook.Tab", background="#E2E8F0", foreground=self.text_color, 
-                        padding=[20, 10], font=("Segoe UI", 10), borderwidth=0)
-        style.map("TNotebook.Tab", background=[("selected", self.panel_color)])
-        
-        # Table (Treeview) Styling
-        style.configure("Treeview", font=("Segoe UI", 10), rowheight=35, 
-                        background=self.panel_color, fieldbackground=self.panel_color, borderwidth=0)
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"), 
-                        background=self.panel_color, foreground="#A0AEC0", borderwidth=0)
-        style.map("Treeview", background=[("selected", "#EDF2F7")], foreground=[("selected", self.text_color)])
-        
-        # Typography
-        style.configure("Timer.TLabel", font=("Segoe UI", 46, "bold"), 
-                        background=self.panel_color, foreground=self.text_color)
-
-    def create_left_panel(self):
-        # White card for the timer
-        left_frame = tk.Frame(self.root, width=300, bg=self.panel_color)
-        left_frame.pack(side="left", fill="y", padx=20, pady=20)
-        left_frame.pack_propagate(False)
-
-        # Timer Display
-        self.timer_label = ttk.Label(left_frame, text="00:00:00", style="Timer.TLabel")
-        self.timer_label.pack(pady=(40, 50))
-
-        # Start/Stop Button
-        self.btn_toggle = tk.Button(left_frame, text="START", bg=self.accent_color, fg="#FFFFFF", 
-                                    font=("Segoe UI", 12, "bold"), relief="flat", cursor="hand2", command=self.toggle_timer)
-        self.btn_toggle.pack(fill="x", padx=20, pady=10, ipady=12)
-
-        # Reset Button
-        self.btn_reset = tk.Button(left_frame, text="Reset Timer", bg=self.panel_color, fg="#718096", 
-                                   font=("Segoe UI", 10), relief="flat", cursor="hand2", command=self.reset_timer)
-        self.btn_reset.pack(fill="x", padx=20, pady=5)
-
-        # Add Entry Button
-        self.btn_add = tk.Button(left_frame, text="ADD ENTRY", bg="#E2E8F0", fg="#A0AEC0",
-                                 font=("Segoe UI", 11, "bold"), relief="flat", state="disabled", command=self.save_log)
-        self.btn_add.pack(fill="x", side="bottom", padx=20, pady=30, ipady=12)
-
-    def create_right_panel(self):
-        right_frame = tk.Frame(self.root, bg=self.bg_color)
-        right_frame.pack(side="right", expand=True, fill="both", padx=(0, 20), pady=20)
-
-        # Top Bar
-        top_bar = tk.Frame(right_frame, bg=self.bg_color)
-        top_bar.pack(fill="x", pady=(0, 15))
-
-        btn_new_cat = tk.Button(top_bar, text="+ New Category", bg=self.panel_color, fg=self.text_color, 
-                                font=("Segoe UI", 10), relief="flat", cursor="hand2", command=self.add_category)
-        btn_new_cat.pack(side="right", ipady=6, ipadx=15)
-
-        # Notebook for Tabs
-        self.notebook = ttk.Notebook(right_frame)
-        self.notebook.pack(expand=True, fill="both")
-        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
-
-    def toggle_timer(self):
-        if not self.running:
-            self.running = True
-            if not self.start_datetime or self.seconds_passed == 0:
-                self.start_datetime = datetime.now()
-            self.btn_toggle.config(text="STOP", bg="#E2E8F0", fg=self.text_color)
-            self.update_clock()
-        else:
-            self.running = False
-            self.btn_toggle.config(text="RESUME", bg=self.accent_color, fg="#FFFFFF")
-            if self.seconds_passed > 0:
-                self.btn_add.config(state="normal", bg=self.text_color, fg="#FFFFFF", cursor="hand2")
-
-    def update_clock(self):
-        if self.running:
-            self.seconds_passed += 1
-            self.display_time()
-            self.root.after(1000, self.update_clock)
-            
-    def display_time(self):
-        h, m = divmod(self.seconds_passed, 3600)
-        m, s = divmod(m, 60)
-        self.timer_label.config(text=f"{h:02d}:{m:02d}:{s:02d}")
-
-    def reset_timer(self):
-        self.running = False
-        self.seconds_passed = 0
-        self.start_datetime = None
-        self.display_time()
-        self.btn_toggle.config(text="START", bg=self.accent_color, fg="#FFFFFF")
-        self.btn_add.config(state="disabled", bg="#E2E8F0", fg="#A0AEC0", cursor="arrow")
-
-    def add_category(self):
-        name = simpledialog.askstring("New Category", "Enter category name:")
-        if name and name.strip():
-            try:
-                self.cursor.execute("INSERT INTO categories (name) VALUES (?)", (name.strip(),))
-                self.conn.commit()
-                self.refresh_tabs()
-            except sqlite3.IntegrityError:
-                messagebox.showerror("Error", "Category already exists.")
-
-    def refresh_tabs(self):
-        for tab in self.notebook.tabs():
-            self.notebook.forget(tab)
-        
-        self.cursor.execute("SELECT name FROM categories")
-        categories = self.cursor.fetchall()
-        
-        for (name,) in categories:
-            frame = ttk.Frame(self.notebook)
-            self.notebook.add(frame, text=f" {name} ")
-            
-            # Treeview Table
-            cols = ("ID", "Name", "Date", "Time", "Duration")
-            tree = ttk.Treeview(frame, columns=cols, show="headings")
-            
-            tree.heading("ID", text="ID")
-            tree.heading("Name", text="NAME")
-            tree.heading("Date", text="DATE")
-            tree.heading("Time", text="TIME")
-            tree.heading("Duration", text="DURATION")
-            
-            tree.column("ID", width=0, stretch=tk.NO) 
-            tree.column("Name", width=250, anchor="w")
-            tree.column("Date", width=120, anchor="center")
-            tree.column("Time", width=120, anchor="center")
-            tree.column("Duration", width=120, anchor="center")
-            
-            tree.pack(expand=True, fill="both")
-            tree.bind("<Double-1>", self.on_row_double_click)
-            
-            self.cursor.execute("SELECT id, log_name, log_date, log_time, duration FROM logs WHERE category_name=? ORDER BY id DESC", (name,))
-            for log in self.cursor.fetchall():
-                log_id, log_name, log_date, log_time, duration_sec = log
-                h, m = divmod(duration_sec, 3600)
-                m, s = divmod(m, 60)
-                duration_str = f"{h:02d}:{m:02d}:{s:02d}"
-                tree.insert("", "end", values=(log_id, log_name, log_date, log_time, duration_str))
-
-    def on_tab_change(self, event):
-        selected_id = self.notebook.select()
-        if selected_id:
-            self.current_category = self.notebook.tab(selected_id, "text").strip()
-
-    def save_log(self):
-        if not self.current_category:
-            messagebox.showwarning("Warning", "Please create and select a category tab first.")
-            return
-        
-        log_date = self.start_datetime.strftime("%m/%d/%Y")
-        log_time = self.start_datetime.strftime("%I:%M %p")
-        log_name = "Untitled Task"
-        
-        self.cursor.execute("INSERT INTO logs (category_name, log_name, log_date, log_time, duration) VALUES (?, ?, ?, ?, ?)",
-                            (self.current_category, log_name, log_date, log_time, self.seconds_passed))
-        self.conn.commit()
-        self.reset_timer()
-        self.refresh_tabs()
-
-    def on_row_double_click(self, event):
-        tree = event.widget
+    def delete_selected_row(self):
+        """Removes the record from the database and updates the UI."""
+        selected_tab = self.notebook.nametowidget(self.notebook.select())
+        tree = selected_tab.winfo_children()[0]
         selected = tree.selection()
-        if not selected:
-            return
-            
-        item = tree.item(selected[0])
-        values = item['values']
-        log_id = values[0]
-        current_name = values[1]
+        if not selected: return
         
-        new_name = simpledialog.askstring("Rename Entry", "Update task name:", initialvalue=current_name)
-        
-        if new_name and new_name.strip():
-            self.cursor.execute("UPDATE logs SET log_name = ? WHERE id = ?", (new_name.strip(), log_id))
+        log_id = tree.item(selected[0])['values'][0]
+        if messagebox.askyesno("Confirm", "Are you sure you want to delete this entry?"):
+            self.cursor.execute("DELETE FROM logs WHERE id = ?", (log_id,))
             self.conn.commit()
             self.refresh_tabs()
+
+    def on_row_double_click(self, event):
+        """Convenience wrapper for the edit function."""
+        self.edit_selected_row()
 
 if __name__ == "__main__":
     root = tk.Tk()
