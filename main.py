@@ -9,12 +9,12 @@ class TimeTrackerApp:
         self.root.title("Time Tracker")
         self.root.geometry("950x600")
         
-        # --- THEME CONFIGURATION (Strict Palette) ---
-        self.bg_color = "#E8DCC4"      # Deep parchment for the main background
-        self.panel_color = "#F5EFE1"   # Lighter paper for cards and active areas
-        self.text_color = "#2C1E1A"    # Dark brown-black mimicking old ink
-        self.accent_color = "#8B261D"  # Dried blood/wax seal red for primary actions
-        self.notebook_color = "#F0EDE2" # Slightly greyed paper for inactive tabs
+        # --- THEME CONFIGURATION ---
+        self.bg_color = "#E8DCC4"      
+        self.panel_color = "#F5EFE1"   
+        self.text_color = "#2C1E1A"    
+        self.accent_color = "#8B261D"  
+        self.notebook_color = "#F0EDE2" 
         
         self.root.configure(bg=self.bg_color)
         
@@ -38,7 +38,6 @@ class TimeTrackerApp:
         self.refresh_tabs()
 
     def setup_db(self):
-        """Creates the necessary database tables for categories and time logs."""
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS categories 
                             (id INTEGER PRIMARY KEY, name TEXT UNIQUE)''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS logs 
@@ -47,22 +46,19 @@ class TimeTrackerApp:
         self.conn.commit()
 
     def setup_styles(self):
-        """Applies the 'Old Paper' theme to standard ttk widgets using the clam engine."""
         style = ttk.Style()
         style.theme_use('clam') 
         
-        # Base Frame Styling
         style.configure("TFrame", background=self.bg_color)
         
-        # Notebook Container
         style.configure("TNotebook", 
                         background=self.bg_color, 
                         borderwidth=0, 
                         tabmargins=[2, 5, 2, 0])
 
-        # Tab Styling (Fixed size, no shift)
+        # Tab Styling: Inactive tabs now match the main app background
         style.configure("TNotebook.Tab", 
-                        background=self.notebook_color, 
+                        background=self.bg_color, 
                         foreground=self.text_color, 
                         padding=[30, 8], 
                         font=("Segoe UI", 10), 
@@ -70,11 +66,13 @@ class TimeTrackerApp:
                         focuscolor="",
                         shiftrelief=0)
         
-        # Tab Selection (Only color changes, no expand map)
+        # Tab Selection: Active tab gets the panel color and red text
         style.map("TNotebook.Tab", 
-                  background=[("selected", self.panel_color)])
+                  background=[("selected", self.panel_color)],
+                  foreground=[("selected", self.accent_color)], 
+                  padding=[("selected", [30, 8]), ("!selected", [30, 8])],
+                  expand=[("selected", 0), ("!selected", 0)]) 
         
-        # Table (Treeview) Body
         style.configure("Treeview", 
                         font=("Segoe UI", 10), 
                         rowheight=35, 
@@ -83,7 +81,6 @@ class TimeTrackerApp:
                         foreground=self.text_color,
                         borderwidth=0)
         
-        # Table Headers (Removed outlines and 3D effects)
         style.configure("Treeview.Heading", 
                         font=("Segoe UI", 10, "bold"), 
                         background=self.notebook_color, 
@@ -91,32 +88,27 @@ class TimeTrackerApp:
                         borderwidth=0, 
                         relief="flat")
         
-        # Table Selection Highlight
         style.map("Treeview", 
                   background=[("selected", self.accent_color)], 
                   foreground=[("selected", self.panel_color)])
         
-        # Timer Display
         style.configure("Timer.TLabel", 
                         font=("Segoe UI", 46, "bold"), 
                         background=self.panel_color, 
                         foreground=self.text_color)
 
     def create_context_menu(self):
-        """Builds the popup menu used for editing and deleting rows."""
         self.context_menu = tk.Menu(self.root, tearoff=0, bg=self.panel_color, fg=self.text_color)
         self.context_menu.add_command(label="Edit Task Name", command=self.edit_selected_row)
         self.context_menu.add_command(label="Delete Entry", command=self.delete_selected_row)
 
     def show_context_menu(self, event):
-        """Triggers the context menu and ensures the right-clicked row is selected."""
         item = event.widget.identify_row(event.y)
         if item:
             event.widget.selection_set(item) 
             self.context_menu.post(event.x_root, event.y_root)
 
     def create_left_panel(self):
-        """Creates the static side panel containing the timer and primary buttons."""
         left_frame = tk.Frame(self.root, width=300, bg=self.panel_color)
         left_frame.pack(side="left", fill="y", padx=20, pady=20)
         left_frame.pack_propagate(False) 
@@ -137,7 +129,6 @@ class TimeTrackerApp:
         self.btn_add.pack(fill="x", side="bottom", padx=20, pady=30, ipady=12)
 
     def create_right_panel(self):
-        """Creates the dynamic area for category management and log tables."""
         right_frame = tk.Frame(self.root, bg=self.bg_color)
         right_frame.pack(side="right", expand=True, fill="both", padx=(0, 20), pady=20)
 
@@ -153,7 +144,6 @@ class TimeTrackerApp:
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
 
     def toggle_timer(self):
-        """Starts or stops the timer loop."""
         if not self.running:
             self.running = True
             if not self.start_datetime or self.seconds_passed == 0:
@@ -167,7 +157,6 @@ class TimeTrackerApp:
                 self.btn_add.config(state="normal", bg=self.text_color, fg=self.panel_color, cursor="hand2")
 
     def update_clock(self):
-        """The recursive loop that increments seconds and updates the display label."""
         if self.running:
             self.seconds_passed += 1
             h, m = divmod(self.seconds_passed, 3600)
@@ -176,7 +165,6 @@ class TimeTrackerApp:
             self.root.after(1000, self.update_clock)
             
     def reset_timer(self):
-        """Clears current progress and resets UI to initial state."""
         self.running = False
         self.seconds_passed = 0
         self.start_datetime = None
@@ -185,7 +173,6 @@ class TimeTrackerApp:
         self.btn_add.config(state="disabled", bg=self.notebook_color, fg=self.text_color, cursor="arrow")
 
     def add_category(self):
-        """Prompts user for a name and adds a new category to the database and tab list."""
         name = simpledialog.askstring("New Category", "Enter category name:")
         if name and name.strip():
             try:
@@ -196,7 +183,6 @@ class TimeTrackerApp:
                 messagebox.showerror("Error", "Category already exists.")
 
     def refresh_tabs(self):
-        """Clears and rebuilds the tab interface based on current database records."""
         for tab in self.notebook.tabs():
             self.notebook.forget(tab)
         
@@ -231,13 +217,11 @@ class TimeTrackerApp:
                 tree.insert("", "end", values=(log_id, log_name, log_date, log_time, duration_str))
 
     def on_tab_change(self, event):
-        """Updates the current_category variable whenever a user clicks a different tab."""
         selected_id = self.notebook.select()
         if selected_id:
             self.current_category = self.notebook.tab(selected_id, "text").strip()
 
     def save_log(self):
-        """Writes the current session time to the database and refreshes the UI."""
         if not self.current_category:
             messagebox.showwarning("Warning", "Select a category tab first.")
             return
@@ -250,7 +234,6 @@ class TimeTrackerApp:
         self.refresh_tabs()
 
     def edit_selected_row(self):
-        """Opens a dialog to rename the task name in the selected row and database."""
         selected_tab = self.notebook.nametowidget(self.notebook.select())
         tree = selected_tab.winfo_children()[0] 
         selected = tree.selection()
@@ -265,7 +248,6 @@ class TimeTrackerApp:
             self.refresh_tabs()
 
     def delete_selected_row(self):
-        """Removes the record from the database and updates the UI."""
         selected_tab = self.notebook.nametowidget(self.notebook.select())
         tree = selected_tab.winfo_children()[0]
         selected = tree.selection()
@@ -278,7 +260,6 @@ class TimeTrackerApp:
             self.refresh_tabs()
 
     def on_row_double_click(self, event):
-        """Convenience wrapper for the edit function."""
         self.edit_selected_row()
 
 if __name__ == "__main__":
